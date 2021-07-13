@@ -1,0 +1,1 @@
+for generating confidence intervals of synaptic probability vs radial distance, please see my [Confidence Interval Plotting Notebook](https://github.com/andi-bergeson/allen_summerworkshop/blob/main/notebooks/confidenceinterval_plotting.ipynb)
