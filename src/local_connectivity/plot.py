@@ -49,7 +49,7 @@ def threepanels_pertype(pre,syn_types,nonsyn_types,s_type,f_type,unique_types,r_
 
     fig.tight_layout()
     plt.close(fig)
-    fig.savefig('./plots/{0:s}/{1:s}.pdf'.format(str(pre.cell_type.values[0]),filename))
+    fig.savefig('./plots/{0:s}/{1:s}/{2:s}.pdf'.format(str(pre.cell_type.values[0]),str(upper_distance_limit),filename))
 
 def makepdfs(pre,syn,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,threshold):
     if threshold == None:

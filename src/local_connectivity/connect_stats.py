@@ -1,9 +1,6 @@
 __all__ = ["binomial_CI"]
 
-from .dist import Euc_cell2cell, Rad_cell2cell, Euc_syn2cell, Rad_syn2cell
-
 import numpy as np
-from caveclient import CAVEclient
 
 def binomial_CI(df, bins):
     fail = []
