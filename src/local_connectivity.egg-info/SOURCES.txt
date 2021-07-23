@@ -1,0 +1,12 @@
+README.md
+setup.py
+src/local_connectivity/__init__.py
+src/local_connectivity/connect_stats.py
+src/local_connectivity/dist.py
+src/local_connectivity/make_tables.py
+src/local_connectivity/plot.py
+src/local_connectivity.egg-info/PKG-INFO
+src/local_connectivity.egg-info/SOURCES.txt
+src/local_connectivity.egg-info/dependency_links.txt
+src/local_connectivity.egg-info/requires.txt
+src/local_connectivity.egg-info/top_level.txt
