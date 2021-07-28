@@ -8,9 +8,10 @@ import statsmodels as sm
 import warnings
 from tqdm import tqdm
 
-def threepanels_pertype(pre,syn_types,nonsyn_types,s_type,f_type,unique_types,r_interval,upper_distance_limit,filename):
+def threepanels_pertype(main,pre,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,filename,display):
     warnings.filterwarnings('ignore')
 
+    unique_types = np.unique(main.cell_type)
     fig, ax = plt.subplots(len(unique_types),3)
     fig.set_size_inches(12,26)
 
@@ -50,8 +51,11 @@ def threepanels_pertype(pre,syn_types,nonsyn_types,s_type,f_type,unique_types,r_
         ax[i,2].set_ylabel("Log Frequency", fontsize=10)
 
     fig.tight_layout()
-    plt.close(fig)
-    fig.savefig('./plots/{0:s}/{1:s}/{2:s}.pdf'.format(str(pre.cell_type.values[0]),str(upper_distance_limit),filename))
+    if display == True:
+        plt.show()
+    else:
+        plt.close(fig)
+        fig.savefig('./plots/{0:s}/{1:s}/{2:s}.pdf'.format(str(pre.cell_type.values[0]),str(upper_distance_limit),filename))
 
 def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,threshold):
     if threshold == None:
@@ -62,9 +66,8 @@ def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upp
                                       select_columns=['id','pt_root_id']).id.values[0])
             filename = '{0:s}-{1:s}-{2:s}-{3:s}bin'.format(str(np.array(pre[i].cell_type)[0]),preid,
             str(np.array(pre[i].pt_root_id)[0]),str(r_interval))
-            unique_types = np.unique(main[i].cell_type)
-            threepanels_pertype(pre[i],syn_types[i],nonsyn_types[i],s_type[i],f_type[i],
-                                unique_types,r_interval,upper_distance_limit,filename)
+            threepanels_pertype(main[i],pre[i],syn_types[i],nonsyn_types[i],s_type[i],f_type[i],
+                                r_interval,upper_distance_limit,filename,display=False)
     else:
         for i in tqdm(range(len(pre))):
             # this will give filename = 'BC-123456-4587604586etc-15bin-40synthresh'
@@ -73,6 +76,5 @@ def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upp
                                       select_columns=['id','pt_root_id']).id.values[0])
             filename = '{0:s}-{1:s}-{2:s}-{3:s}bin-{4:s}synthresh'.format(str(np.array(pre[i].cell_type)[0]),preid,
             str(np.array(pre[i].pt_root_id)[0]),str(r_interval),str(threshold))
-            unique_types = np.unique(main[i].cell_type)
-            threepanels_pertype(pre[i],syn_types[i],nonsyn_types[i],s_type[i],f_type[i],
-                                unique_types,r_interval,upper_distance_limit,filename)
+            threepanels_pertype(main[i],pre[i],syn_types[i],nonsyn_types[i],s_type[i],f_type[i],
+                                r_interval,upper_distance_limit,filename,display=False)

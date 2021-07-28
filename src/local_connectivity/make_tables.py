@@ -1,7 +1,8 @@
-__all__ = ["build_tables","class_spitter","type_spitter","prep_tables","prep_tables_thresh","find_orphans"]
+__all__ = ["build_tables","class_spitter","type_spitter","prep_tables","prep_tables_thresh","final_prep","find_orphans"]
 
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 from .dist import Euc_cell2cell, Rad_cell2cell, Euc_syn2cell, Rad_syn2cell
 from .connect_stats import binomial_CI
 
@@ -95,16 +96,20 @@ def prep_tables(main,syn,nonsyn,r_interval,upper_distance_limit):
         s_type.append(s)
     return main_types,syn_types,nonsyn_types,f_type,s_type
 
-def prep_tables_thresh(main,syn,r_interval,upper_distance_limit,threshold):
+def prep_tables_thresh(main,syn,nonsyn,r_interval,upper_distance_limit,threshold):
     main['thresh'] = main.apply(lambda row: np.min(row.d_syn2post) < threshold, axis=1)
     syn['thresh'] = syn.apply(lambda row: np.min(row.d_syn2post) < threshold, axis=1)
+    nonsyn['thresh'] = nonsyn.apply(lambda row: np.min(row.d_syn2post) < threshold, axis=1)
     mask_m = main['thresh'] == True
     mask_s = syn['thresh'] == True
+    mask_n = nonsyn['thresh'] == True
     main_thresh = main[mask_m].reset_index(drop=True)
     syn_thresh = syn[mask_s].reset_index(drop=True)
+    nonsyn_thresh = nonsyn[mask_n].reset_index(drop=True)
 
     main_types_thresh = type_spitter(main_thresh,main_thresh)
     syn_types_thresh = type_spitter(main_thresh,syn_thresh)
+    nonsyn_types_thresh = type_spitter(main_thresh,nonsyn_thresh)
 
     bins = np.array(range(0,upper_distance_limit,r_interval))
     bins = np.append(bins,r_interval+bins[-1])
@@ -113,7 +118,33 @@ def prep_tables_thresh(main,syn,r_interval,upper_distance_limit,threshold):
         f,s = binomial_CI(main_types_thresh[j],bins)
         f_type_thresh.append(f)
         s_type_thresh.append(s)
-    return main_thresh,syn_thresh,main_types_thresh,syn_types_thresh,f_type_thresh,s_type_thresh
+    return main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh
+
+def final_prep(main,syn,nonsyn,r_interval,upper_distance_limit,threshold):
+    main_types,syn_types,nonsyn_types,f_type,s_type = [],[],[],[],[]
+    main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh = [],[],[],[],[],[],[],[]
+    for i in tqdm(range(len(main))):
+        if threshold == None:
+            beh = prep_tables(main[i],syn[i],nonsyn[i],r_interval,upper_distance_limit)
+            main_types.append(beh[0])
+            syn_types.append(beh[1])
+            nonsyn_types.append(beh[2])
+            f_type.append(beh[3])
+            s_type.append(beh[4])
+        else:
+            bep = prep_tables_thresh(main[i],syn[i],nonsyn[i],r_interval,upper_distance_limit,threshold)
+            main_thresh.append(bep[0])
+            syn_thresh.append(bep[1])
+            nonsyn_thresh.append(bep[2])
+            main_types_thresh.append(bep[3])
+            syn_types_thresh.append(bep[4])
+            nonsyn_types_thresh.append(bep[5])
+            f_type_thresh.append(bep[6])
+            s_type_thresh.append(bep[7])
+    if threshold == None:
+        return main_types,syn_types,nonsyn_types,f_type,s_type
+    else:
+        return main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh
 
 def find_orphans(client,pre_df):
     syn_unfiltered = client.materialize.query_table('synapses_pni_2',
