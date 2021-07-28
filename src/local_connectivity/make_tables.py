@@ -8,7 +8,9 @@ from .connect_stats import binomial_CI
 def build_tables(client,pre_df):
     pre_root_id = pre_df.pt_root_id.values[0]
     syn_unfiltered = client.materialize.query_table('synapses_pni_2',
-                                                filter_equal_dict={'pre_pt_root_id':pre_root_id})
+                                                filter_equal_dict={'pre_pt_root_id':pre_root_id},
+                                                select_columns=['pre_pt_root_id','post_pt_root_id',
+                                                               'size','ctr_pt_position','valid'])
     # if updated, this will change
     correct_soma_table = client.info.get_datastack_info()['soma_table']
     # x, y, and z will have their own columns
@@ -47,8 +49,7 @@ def build_tables(client,pre_df):
     # merge!
     main = pd.merge(soma_full,syn_nuc,on='pt_root_id',how='left')
     # these columns are useless to me
-    main = main.drop(columns=['id_x', 'id_y', 'valid_x', 'valid_y', 'pt_supervoxel_id', 'pre_pt_supervoxel_id',
-                          'post_pt_supervoxel_id', 'pre_pt_position', 'post_pt_position'])
+    main = main.drop(columns=['id','valid_x', 'valid_y', 'pt_supervoxel_id'])
     main = main.fillna(0)
     # add new columns for cartesian & radial distance to root_id's
     main['d'] = Euc_cell2cell(pre_df,main)
@@ -86,6 +87,7 @@ def prep_tables(main,syn,nonsyn,r_interval,upper_distance_limit):
     nonsyn_types = type_spitter(main,nonsyn)
 
     bins = np.array(range(0,upper_distance_limit,r_interval))
+    bins = np.append(bins,r_interval+bins[-1])
     f_type,s_type = [],[]
     for j in range(len(main_types)):
         f,s = binomial_CI(main_types[j],bins)
@@ -105,6 +107,7 @@ def prep_tables_thresh(main,syn,r_interval,upper_distance_limit,threshold):
     syn_types_thresh = type_spitter(main_thresh,syn_thresh)
 
     bins = np.array(range(0,upper_distance_limit,r_interval))
+    bins = np.append(bins,r_interval+bins[-1])
     f_type_thresh,s_type_thresh = [],[]
     for j in range(len(main_types_thresh)):
         f,s = binomial_CI(main_types_thresh[j],bins)
