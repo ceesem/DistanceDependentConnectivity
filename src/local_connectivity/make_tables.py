@@ -1,4 +1,5 @@
-__all__ = ["build_tables","class_spitter","type_spitter","prep_tables","prep_tables_thresh","final_prep","find_orphans"]
+__all__ = ["rename_by_layer","build_tables","class_spitter","type_spitter","prep_tables","prep_tables_thresh","final_prep",
+"find_orphans","depth_divider"]
 
 import pandas as pd
 import numpy as np
@@ -6,7 +7,19 @@ from tqdm import tqdm
 from .dist import Euc_cell2cell, Rad_cell2cell, Euc_syn2cell, Rad_syn2cell
 from .connect_stats import binomial_CI
 
-def build_tables(client,pre_df):
+def rename_by_layer(df,depths,depth_names):
+    for i in range(len(depths)):
+        df.loc[(df['cell_type']=='BC') & ((df['pt_position_y']*(4/1000))>=depths[i][0])
+               & ((df['pt_position_y']*(4/1000))<depths[i][1]), 'cell_type'] = '{0:s}_BC'.format(depth_names[i])
+        df.loc[(df['cell_type']=='BPC') & ((df['pt_position_y']*(4/1000))>=depths[i][0])
+               & ((df['pt_position_y']*(4/1000))<depths[i][1]), 'cell_type'] = '{0:s}_BPC'.format(depth_names[i])
+        df.loc[(df['cell_type']=='MC') & ((df['pt_position_y']*(4/1000))>=depths[i][0])
+               & ((df['pt_position_y']*(4/1000))<depths[i][1]), 'cell_type'] = '{0:s}_MC'.format(depth_names[i])
+        df.loc[(df['cell_type']=='6P') & ((df['pt_position_y']*(4/1000))>=depths[i][0])
+               & ((df['pt_position_y']*(4/1000))<depths[i][1]), 'cell_type'] = '{0:s}_P'.format(depth_names[i])
+    return df
+
+def build_tables(client,pre_df,depth_intervals,depth_names):
     pre_root_id = pre_df.pt_root_id.values[0]
     syn_unfiltered = client.materialize.query_table('synapses_pni_2',
                                                 filter_equal_dict={'pre_pt_root_id':pre_root_id},
@@ -31,6 +44,7 @@ def build_tables(client,pre_df):
                                                split_positions=True)
     soma_full.loc[soma_full['cell_type'] == '6CT', 'cell_type'] = '6P'
     soma_full.loc[soma_full['cell_type'] == '6IT', 'cell_type'] = '6P'
+    soma_full = rename_by_layer(soma_full,depth_intervals,depth_names)
     # masking the synapse table for only single-body neurons. these contain a ton of duplicates
     syn_nuc_dup = syn_unfiltered.query("post_pt_root_id in @unique_nuc").reset_index(drop=True)
     # new column in synapse table = number of synapses per single soma
@@ -172,3 +186,47 @@ def find_orphans(client,pre_df):
     osyn['r_ave'] = osyn.apply(lambda row: sum(row.r)/len(row.r), axis=1)
     osyn['r_range'] = osyn.apply(lambda row: np.max(row.r) - np.min(row.r), axis=1)
     return osyn,uniq_orph,len(orph)
+
+def depth_divider(depths,main,syn,nonsyn,r_interval,upper_distance_limit):
+    d_main,d_syn,d_nonsyn = [],[],[]
+    for i in range(len(depths)):
+        dep_m,dep_syn,dep_non = [],[],[]
+        for j in range(len(syn)):
+            m0 = main[j][((main[j]['pt_position_y']*(4/1000))<depths[i][1]) & ((main[j]['pt_position_y']*(4/1000))>depths[i][0])].reset_index(drop=True)
+            m1 = syn[j][((syn[j]['pt_position_y']*(4/1000))<depths[i][1]) & ((syn[j]['pt_position_y']*(4/1000))>depths[i][0])].reset_index(drop=True)
+            m2 = nonsyn[j][((nonsyn[j]['pt_position_y']*(4/1000))<depths[i][1]) & ((nonsyn[j]['pt_position_y']*(4/1000))>depths[i][0])].reset_index(drop=True)
+            dep_m.append(m0)
+            dep_syn.append(m1)
+            dep_non.append(m2)
+        d_main.append(dep_m)
+        d_syn.append(dep_syn)
+        d_nonsyn.append(dep_non)
+    d_main_types,d_syn_types,d_nonsyn_types = [],[],[]
+    for i in range(len(depths)):
+        ddm,dds,ddn = [],[],[]
+        for j in range(len(d_syn[i])):
+            tm = type_spitter(main[j],d_main[i][j])
+            ts = type_spitter(main[j],d_syn[i][j])
+            tn = type_spitter(main[j],d_nonsyn[i][j])
+            ddm.append(tm)
+            dds.append(ts)
+            ddn.append(tn)
+        d_main_types.append(ddm)
+        d_syn_types.append(dds)
+        d_nonsyn_types.append(ddn)
+    bins = np.array(range(0,upper_distance_limit,r_interval))
+    bins = np.append(bins,r_interval+bins[-1])
+    d_f_type,d_s_type = [],[]
+    for i in range(len(depths)):
+        ddff,ddss = [],[]
+        for j in range(len(d_main_types[i])):
+            cellf,cells = [],[]
+            for k in range(len(d_main_types[i][j])):
+                f,s = binomial_CI(d_main_types[i][j][k],bins)
+                cellf.append(f)
+                cells.append(s)
+            ddff.append(cellf)
+            ddss.append(cells)
+        d_f_type.append(ddff)
+        d_s_type.append(ddss)
+    return d_main,d_syn,d_nonsyn,d_main_types,d_syn_types,d_nonsyn_types,d_f_type,d_s_type
