@@ -5,9 +5,6 @@ import numpy as np
 def binomial_CI(df, bins):
     fail = []
     success = []
-    # no cells are less than 0 microns away, and this makes sure my arrays are the same size
-    # fail.append(0)
-    # success.append(0)
     for i in range(len(bins)-1):
         # masking for specific distance bin
         masked_df = df[(df['r'] > bins[i]) & (df['r'] < bins[i+1])].reset_index(drop=True)
@@ -30,12 +27,12 @@ def pmax_type(s_type,f_type):
         b = np.where(p == np.max(p))[0]
         pmax.append(np.max(p))
         bin_ind.append(b)
-    for j in range(len(s_type)):
-        if pmax[j] == np.max(pmax):
-            typemax.append([pmax[j],j])
-        else:
-            continue
-    return pmax,bin_ind,typemax
+    # for j in range(len(s_type)):
+    #     if pmax[j] == np.max(pmax):
+    #         typemax.append([pmax[j],j])
+    #     else:
+    #         continue
+    return pmax#,bin_ind,typemax
 
 def probfunct(param,df):
     d = df['r']
