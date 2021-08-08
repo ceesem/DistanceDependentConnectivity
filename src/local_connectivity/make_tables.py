@@ -8,6 +8,28 @@ from .dist import Euc_cell2cell, Rad_cell2cell, Euc_syn2cell, Rad_syn2cell
 from .connect_stats import binomial_CI
 
 def rename_by_layer(df,depths,depth_names):
+    """
+    Rename cell types in any df using their pt_position_y, or depth in the sample, to determine which cortical layer they're in.
+
+    Parameters
+    ----------
+    df : pandas dataframe
+        Must have split positions and 'cell_type'
+    depths : A 2D numpy array of shape (len(layers), 2)
+        Array of discrete layer bounds.
+    depth_names : A 1D numpy array of shape (len(layers),)
+        Array consisting of layer names to be used in new cell_type.
+
+    Returns
+    -------
+    out : pandas dateframe
+        with fancy new cell types!
+
+    Examples
+    --------
+    depths = [[20,40],[40,60]]
+    depth_names = ['23','4']
+    """
     for i in range(len(depths)):
         df.loc[(df['cell_type']=='BC') & ((df['pt_position_y']*(4/1000))>=depths[i][0])
                & ((df['pt_position_y']*(4/1000))<depths[i][1]), 'cell_type'] = '{0:s}_BC'.format(depth_names[i])
@@ -17,9 +39,42 @@ def rename_by_layer(df,depths,depth_names):
                & ((df['pt_position_y']*(4/1000))<depths[i][1]), 'cell_type'] = '{0:s}_MC'.format(depth_names[i])
         df.loc[(df['cell_type']=='6P') & ((df['pt_position_y']*(4/1000))>=depths[i][0])
                & ((df['pt_position_y']*(4/1000))<depths[i][1]), 'cell_type'] = '{0:s}_P'.format(depth_names[i])
+    df.loc[(df['cell_type']=='23_P'), 'cell_type'] = 'Omitted_P'
+    df.loc[(df['cell_type']=='4_P'), 'cell_type'] = 'Omitted_P'
+    df.loc[(df['cell_type']=='6_BPC'), 'cell_type'] = '5_BPC'
+#     df.loc[(df['cell_type']=='6_BC'), 'cell_type'] = 'BC'
+#     df.loc[(df['cell_type']=='6_MC'), 'cell_type'] = 'MC'
     return df
 
-def build_tables(client,pre_df,depth_intervals,depth_names):
+def build_tables(client,pre_df,depth_intervals,depth_names,syndup=None):
+    """
+
+    Parameters
+    ----------
+    client : CAVEclient token
+    pre_df : pandas dataframe
+        Must have split positions and 'cell_type'
+    depths : A 2D numpy array of shape (len(layers), 2)
+        Array of discrete layer bounds.
+    depth_names : A 1D numpy array of shape (len(layers),)
+        Array consisting of layer names to be used in new cell_type.
+    syn_dup : Optional
+        Determines whether a df will be returned consisting of all synapses, aka duplicate root_ids, and split positions
+
+    Returns
+    -------
+    out : 3 pandas dataframes if syndup=False, 4 if True
+        first is "main", where all confirmed somas are listed, connected or not.
+        second is "syn", a subset of main, only connected somas
+        third is "nonsyn", a subset of main, only if unconnected to pre-syn
+        fourth (optional) is "syndup", where every synapse has its own row, resulting in duplicate rows of the same soma
+
+    Examples
+    --------
+    main,syn,nonsyn,syndup = build_tables(client,pre,[[20,40],[40,60]],['23','4'],syndup)
+    main,syn,nonsyn = build_tables(client,pre,[[20,40],[40,60]],['23','4'])
+
+    """
     pre_root_id = pre_df.pt_root_id.values[0]
     syn_unfiltered = client.materialize.query_table('synapses_pni_2',
                                                 filter_equal_dict={'pre_pt_root_id':pre_root_id},
@@ -78,7 +133,29 @@ def build_tables(client,pre_df,depth_intervals,depth_names):
     # new tables sorted from main of synaptic targets or non-synaptic neighbors of pre_root_id
     syn = main.query('pt_root_id in @unique_syn_nuc').reset_index(drop=True)
     nonsyn = main.query('pt_root_id not in @unique_syn_nuc').reset_index(drop=True)
-    return main,syn,nonsyn
+    # adding a column for pre that states how many synapses & somas are targetted
+    pre_df['num_targets'] = len(syn)
+    pre_df['num_syn'] = len(syn_nuc_dup)
+    if syndup == None:
+        return main,syn,nonsyn
+    # unfortunately am lazy and wrote distance function w/o split positions, so this is my workaround
+    syn_dup_unfiltered = client.materialize.query_table('synapses_pni_2',
+                                            filter_equal_dict={'pre_pt_root_id':pre_root_id},
+                                            select_columns=['pre_pt_root_id','post_pt_root_id',
+                                                            'size','ctr_pt_position','valid'],
+                                            split_positions=True)
+    syn_dup_df = syn_dup_unfiltered.query("post_pt_root_id in @unique_nuc").reset_index(drop=True)
+    syn_dup_df['num_syn'] = syn_dup_df.groupby('post_pt_root_id').transform('count')['valid']
+    syn_dup_df = syn_dup_df.sort_values(by=['post_pt_root_id']).reset_index(drop=True)
+    syn_dup_df.rename(columns={'size':'sizes'}, inplace=True)
+    syn_dup_df.rename(columns={'post_pt_root_id':'pt_root_id'}, inplace=True)
+    maindup = pd.merge(soma_full,syn_dup_df,on='pt_root_id',how='right')
+    maindup = maindup.drop(columns=['id','valid_x', 'valid_y', 'pt_supervoxel_id'])
+    maindup = maindup.fillna(0)
+    syndup = maindup.query('pt_root_id in @unique_syn_nuc').reset_index(drop=True)
+    syndup['d'] = Euc_cell2cell(pre_df,syndup)
+    syndup['r'] = Rad_cell2cell(pre_df,syndup)
+    return main,syn,nonsyn,syndup
 
 def class_spitter(main,df_to_sort):
     classes = np.unique(main.classification_system)
@@ -96,7 +173,7 @@ def type_spitter(main,df_to_sort):
         cellarray.append(new)
     return cellarray
 
-def prep_tables(main,syn,nonsyn,r_interval,upper_distance_limit):
+def prep_tables(main,syn,nonsyn,r_interval,upper_distance_limit,syndup=None):
     main_types = type_spitter(main,main)
     syn_types = type_spitter(main,syn)
     nonsyn_types = type_spitter(main,nonsyn)
@@ -108,7 +185,11 @@ def prep_tables(main,syn,nonsyn,r_interval,upper_distance_limit):
         f,s = binomial_CI(main_types[j],bins)
         f_type.append(f)
         s_type.append(s)
-    return main_types,syn_types,nonsyn_types,f_type,s_type
+    if type(syndup) == pd.DataFrame:
+        syndup_types = type_spitter(main,syndup)
+        return main_types,syn_types,nonsyn_types,f_type,s_type,syndup_types
+    else:
+        return main_types,syn_types,nonsyn_types,f_type,s_type
 
 def prep_tables_thresh(main,syn,nonsyn,r_interval,upper_distance_limit,threshold):
     main['thresh'] = main.apply(lambda row: np.min(row.d_syn2post) < threshold, axis=1)
@@ -134,17 +215,26 @@ def prep_tables_thresh(main,syn,nonsyn,r_interval,upper_distance_limit,threshold
         s_type_thresh.append(s)
     return main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh
 
-def final_prep(main,syn,nonsyn,r_interval,upper_distance_limit,threshold):
-    main_types,syn_types,nonsyn_types,f_type,s_type = [],[],[],[],[]
+def final_prep(main,syn,nonsyn,r_interval,upper_distance_limit,syndup=None,threshold=None):
+    main_types,syn_types,syndup_types,nonsyn_types,f_type,s_type = [],[],[],[],[],[]
     main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh = [],[],[],[],[],[],[],[]
     for i in tqdm(range(len(main))):
         if threshold == None:
-            beh = prep_tables(main[i],syn[i],nonsyn[i],r_interval,upper_distance_limit)
-            main_types.append(beh[0])
-            syn_types.append(beh[1])
-            nonsyn_types.append(beh[2])
-            f_type.append(beh[3])
-            s_type.append(beh[4])
+            if syndup == None:
+                beh = prep_tables(main[i],syn[i],nonsyn[i],r_interval,upper_distance_limit,syndup)
+                main_types.append(beh[0])
+                syn_types.append(beh[1])
+                nonsyn_types.append(beh[2])
+                f_type.append(beh[3])
+                s_type.append(beh[4])
+            else:
+                beh = prep_tables(main[i],syn[i],nonsyn[i],r_interval,upper_distance_limit,syndup[i])
+                main_types.append(beh[0])
+                syn_types.append(beh[1])
+                nonsyn_types.append(beh[2])
+                f_type.append(beh[3])
+                s_type.append(beh[4])
+                syndup_types.append(beh[5])
         else:
             bep = prep_tables_thresh(main[i],syn[i],nonsyn[i],r_interval,upper_distance_limit,threshold)
             main_thresh.append(bep[0])
@@ -156,7 +246,10 @@ def final_prep(main,syn,nonsyn,r_interval,upper_distance_limit,threshold):
             f_type_thresh.append(bep[6])
             s_type_thresh.append(bep[7])
     if threshold == None:
-        return main_types,syn_types,nonsyn_types,f_type,s_type
+        if syndup == None:
+            return main_types,syn_types,nonsyn_types,f_type,s_type
+        else:
+            return main_types,syn_types,nonsyn_types,f_type,s_type,syndup_types
     else:
         return main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh
 
