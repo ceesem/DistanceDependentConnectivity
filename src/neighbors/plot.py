@@ -15,7 +15,7 @@ def threepanels_pertype(main,pre,syn_types,nonsyn_types,s_type,f_type,r_interval
     warnings.filterwarnings('ignore')
     unique_types = np.unique(main.cell_type)
     fig, ax = plt.subplots(len(unique_types),3)
-    fig.set_size_inches(len(unique_types)/2,len(unique_types)*2.8)
+    fig.set_size_inches(len(unique_types)/1.6,len(unique_types)*3.6)
     pmax = pmax_type(s_type,f_type)
     if MLEresults == True:
         mu = 0
@@ -85,7 +85,7 @@ def threepanels_pertype(main,pre,syn_types,nonsyn_types,s_type,f_type,r_interval
             os.makedirs('./plots/{0:s}/{1:s}/'.format(str(pre.cell_type.values[0]),str(upper_distance_limit)))
         fig.savefig('./plots/{0:s}/{1:s}/{2:s}.pdf'.format(str(pre.cell_type.values[0]),str(upper_distance_limit),filename))
 
-def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,MLEresults,threshold):
+def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,MLEresults,threshold=None):
     if threshold == None:
         for i in tqdm(range(len(pre))):
             # this will give filename = 'BC-123456-458760458604etc-15bin'

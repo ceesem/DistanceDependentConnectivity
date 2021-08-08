@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="local_connectivity",
+    name="neighbors",
     version='0.1',
     author='Andi Bergeson',
     packages=find_packages(where="src"),
