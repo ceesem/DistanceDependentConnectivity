@@ -1,8 +1,9 @@
-__all__  = ["threepanels_pertype","makepdfs"]
+__all__  = ["threepanels_pertype","makepdfs","heatmap","annotate_heatmap"]
 
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib import ticker
 import seaborn as sns
 import statsmodels as sm
 import warnings
@@ -11,11 +12,11 @@ from scipy.optimize import minimize
 from .connect_stats import probfunct,pmax_type,log_likelihood
 
 def threepanels_pertype(main,pre,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,
-                        filename,MLEresults,display):
+                        filename,MLEresults=True,display=False):
     warnings.filterwarnings('ignore')
     unique_types = np.unique(main.cell_type)
     fig, ax = plt.subplots(len(unique_types),3)
-    fig.set_size_inches(len(unique_types)/1.6,len(unique_types)*3.6)
+    fig.set_size_inches(len(unique_types)*0.67,len(unique_types)*3.5)
     pmax = pmax_type(s_type,f_type)
     if MLEresults == True:
         mu = 0
@@ -85,10 +86,11 @@ def threepanels_pertype(main,pre,syn_types,nonsyn_types,s_type,f_type,r_interval
             os.makedirs('./plots/{0:s}/{1:s}/'.format(str(pre.cell_type.values[0]),str(upper_distance_limit)))
         fig.savefig('./plots/{0:s}/{1:s}/{2:s}.pdf'.format(str(pre.cell_type.values[0]),str(upper_distance_limit),filename))
 
-def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,MLEresults,threshold=None):
+def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upper_distance_limit,
+            MLEresults=True,threshold=None,display=False):
     if threshold == None:
         for i in tqdm(range(len(pre))):
-            # this will give filename = 'BC-123456-458760458604etc-15bin'
+            # this will give filename = '23_BC-123456-458760458604etc-15bin'
             try:
                 preid = str(client.materialize.query_table('allen_soma_coarse_cell_class_model_v1',
                                       filter_equal_dict = {'pt_root_id':pre[i].pt_root_id.values[0]},
@@ -99,10 +101,10 @@ def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upp
                 filename = '{0:s}-{1:s}-{2:s}bin'.format(str(np.array(pre[i].cell_type)[0]),
                 str(np.array(pre[i].pt_root_id)[0]),str(r_interval))
             threepanels_pertype(main[i],pre[i],syn_types[i],nonsyn_types[i],s_type[i],f_type[i],
-                                r_interval,upper_distance_limit,filename,MLEresults,display=False)
+                                r_interval,upper_distance_limit,filename,MLEresults,display)
     else:
         for i in tqdm(range(len(pre))):
-            # this will give filename = 'BC-123456-4587604586etc-15bin-40synthresh'
+            # this will give filename = '23_BC-123456-4587604586etc-15bin-40synthresh'
             try:
                 preid = str(client.materialize.query_table('allen_soma_coarse_cell_class_model_v1',
                                       filter_equal_dict = {'pt_root_id':pre[i].pt_root_id.values[0]},
@@ -113,4 +115,87 @@ def makepdfs(client,pre,main,syn_types,nonsyn_types,s_type,f_type,r_interval,upp
                 filename = '{0:s}-{1:s}-{2:s}bin-{3:s}synthresh'.format(str(np.array(pre[i].cell_type)[0]),
                 str(np.array(pre[i].pt_root_id)[0]),str(r_interval),str(threshold))
             threepanels_pertype(main[i],pre[i],syn_types[i],nonsyn_types[i],s_type[i],f_type[i],
-                                r_interval,upper_distance_limit,filename,MLEresults,display=False)
+                                r_interval,upper_distance_limit,filename,MLEresults,display)
+
+def heatmap(data, row_labels, col_labels, ax=None,
+            cbar_kw={}, cbarlabel="", **kwargs):
+    # Modified from https://matplotlib.org/3.1.0/gallery/images_contours_and_fields/image_annotated_heatmap.html
+    if not ax:
+        ax = plt.gca()
+    # Plot the heatmap
+    im = ax.imshow(data, **kwargs)
+    # Create colorbar
+    cbar = ax.figure.colorbar(im, ax=ax, ticks=[0,.1,1], **cbar_kw)
+    cbar.ax.set_ylabel(cbarlabel, rotation=-90, va="bottom")
+    ax.set_xticks(np.arange(len(row_labels)))
+    ax.set_yticks(np.arange(len(col_labels)))
+    ax.set_xticklabels(row_labels)
+    ax.set_yticklabels(col_labels)
+    # Let the horizontal axes labeling appear on top.
+    ax.tick_params(top=True, bottom=False,
+                   labeltop=True, labelbottom=False)
+    plt.setp(ax.get_xticklabels(), rotation=-30, ha="right",
+             rotation_mode="anchor")
+    # Turn spines off and create white grid.
+    ax.spines[:].set_visible(False)
+    ax.set_xticks(np.arange(len(row_labels)+1)-.5, minor=True)
+    ax.set_yticks(np.arange(len(col_labels)+1)-.5, minor=True)
+    ax.grid(which="minor", color="w", linestyle='-', linewidth=3)
+    ax.tick_params(which="minor", bottom=False, left=False)
+    return im, cbar
+
+def annotate_heatmap(im, nconn, nprobe, data=None, valfmt="{x:.2f}",
+                     textcolors=("white","black"),
+                     threshold=None, **textkw):
+    if not isinstance(data, (list, np.ndarray)):
+        data = im.get_array()
+    # Normalize text color threshold to the images color range.
+    if threshold is not None:
+        threshold = im.norm(threshold)
+    else:
+        threshold = im.norm(data.max())/2.
+    # Set default alignment to center, but allow it to be
+    # overwritten by textkw.
+    kw1 = dict(horizontalalignment="center",
+              verticalalignment="center",
+              fontsize=13)
+    kw1.update(textkw)
+    kw2 = dict(horizontalalignment="center",
+              verticalalignment="bottom",
+              fontsize=8)
+    kw3 = dict(horizontalalignment="center",
+              verticalalignment="top",
+              fontsize=8)
+    # Get the formatter in case a string is supplied
+    if isinstance(valfmt, str):
+        valfmt = ticker.StrMethodFormatter(valfmt)
+    # Loop over the data and create a `Text` for each "pixel".
+    # Change the text's color depending on the data.
+    texts = []
+    for i in range(data.shape[0]):
+        for j in range(data.shape[1]):
+            try:
+                kw1.update(color=textcolors[int(im.norm(data[i][j]) > threshold)])
+                kw2.update(color=textcolors[int(im.norm(data[i][j]) > threshold)])
+                kw3.update(color=textcolors[int(im.norm(data[i][j]) > threshold)])
+                # if nconn[i][j] == 0:
+                #     text1 = im.axes.text(j, i, valfmt(0, None), **kw1)
+                # else:
+                #     text1 = im.axes.text(j, i, valfmt(data[i][j], None), **kw1)
+                text1 = im.axes.text(j, i, valfmt(data[i][j], None), **kw1)
+                text2 = im.axes.text(j, i-.2, nconn[i][j], **kw2)
+                text3 = im.axes.text(j, i+.2, nprobe[i][j], **kw3)
+                texts.append(text1)
+                texts.append(text2)
+                texts.append(text3)
+            except:
+                kw1.update(color='grey')
+                kw2.update(color='grey')
+                kw3.update(color='grey')
+                text1 = im.axes.text(j, i, data[i][j], **kw1)
+                text2 = im.axes.text(j, i-.2, nconn[i][j], **kw2)
+                text3 = im.axes.text(j, i+.2, nprobe[i][j], **kw3)
+                texts.append(text1)
+                texts.append(text2)
+                texts.append(text3)
+    return texts
