@@ -134,8 +134,8 @@ def build_tables(client,pre_df,depth_intervals,depth_names,syndup=None):
     syn = main.query('pt_root_id in @unique_syn_nuc').reset_index(drop=True)
     nonsyn = main.query('pt_root_id not in @unique_syn_nuc').reset_index(drop=True)
     # adding a column for pre that states how many synapses & somas are targetted
-    pre_df['num_targets'] = len(syn)
-    pre_df['num_syn'] = len(syn_nuc_dup)
+    pre_df.loc[:,'num_targets'] = len(unique_syn_nuc)
+    pre_df.loc[:,'num_syn'] = len(syn_nuc_dup)
     if syndup == None:
         return main,syn,nonsyn
     # unfortunately am lazy and wrote distance function w/o split positions, so this is my workaround
@@ -216,6 +216,54 @@ def prep_tables_thresh(main,syn,nonsyn,r_interval,upper_distance_limit,threshold
     return main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh
 
 def final_prep(main,syn,nonsyn,r_interval,upper_distance_limit,syndup=None,threshold=None):
+    """
+    Takes tables generated from pre-syn, separates by type, and builds confidence intervals
+
+    Parameters
+    ----------
+    main : pandas dataframe
+        Must have split positions and 'cell_type'
+    syn : A 2D numpy array of shape (len(layers), 2)
+        Array of discrete layer bounds.
+    nonsyn : A 1D numpy array of shape (len(layers),)
+        Array consisting of layer names to be used in new cell_type.
+    r_interval : Float64, units = microns
+        Determines the size of the lateral distance bins. Typical = 15-25
+    upper_distance_limit : Float64, units = microns
+        Determines the limit of the farthest lateral distance bin. Typical = 200-400
+
+    Optional Parameters
+    -------------------
+    syndup : None, or pandas dataframe
+        Default = None. If given, will generate CI's with duplicate somas
+    threshold : None, or Float64
+        Default = None. If given, will mask tables previously generated of post-synaptic cells that have been synapsed
+        more than [whatever given threshold] away from the target soma.
+
+    Returns
+    -------
+    main_types : array of pandas dataframes
+        length = number of unique cell types in main, populated by dataframes that are separated by type
+    syn_types : array of pandas dataframes
+        same as main_types, except dataframes exclusively consist of somas that are connected to pre-syn
+    nonsyn_types : array of pandas dataframes
+        same as main_types, except dataframes exclusively consist of somas that are NOT connected to pre-syn
+    f_type : array of integers
+        length = number of bins; each element corresponds to the number of failed connections within that bin
+    s_type : array of integers
+        length = number of bins; each element corresponds to the number of successful connections within that bin
+
+    Examples
+    --------
+    main_types,syn_types,nonsyn_types,f_type,s_type = [],[],[],[],[],[]
+    for i in range(len(pre)):
+        bep = make_tables.final_prep(main[i],syn[i],nonsyn[i],r_interval,up)
+        main_types.append(bep[0])
+        syn_types.append(bep[1])
+        nonsyn_types.append(bep[2])
+        f_type.append(bep[3])
+        s_type.append(bep[4])
+    """
     main_types,syn_types,syndup_types,nonsyn_types,f_type,s_type = [],[],[],[],[],[]
     main_thresh,syn_thresh,nonsyn_thresh,main_types_thresh,syn_types_thresh,nonsyn_types_thresh,f_type_thresh,s_type_thresh = [],[],[],[],[],[],[],[]
     for i in tqdm(range(len(main))):
@@ -281,6 +329,9 @@ def find_orphans(client,pre_df):
     return osyn,uniq_orph,len(orph)
 
 def depth_divider(depths,main,syn,nonsyn,r_interval,upper_distance_limit):
+    """
+    I uhhhhhh decided that this was a silly function and could just reassign cell_type name...
+    """
     d_main,d_syn,d_nonsyn = [],[],[]
     for i in range(len(depths)):
         dep_m,dep_syn,dep_non = [],[],[]
