@@ -1,4 +1,4 @@
-__all__ = ["binomial_CI","pmax_type"]
+__all__ = ["binomial_CI","pmax_type","probfunct","log_likelihood","neg_log_likelihood","GaussianMLE"]
 
 import numpy as np
 import pandas as pd
@@ -46,9 +46,15 @@ def log_likelihood(param,syn,nonsyn):
     conn = np.sum(np.log(probfunct(param,syn)))
     unc = np.sum(np.log(1. - probfunct(param,nonsyn)))
     l = conn+unc
+    return l
+
+def neg_log_likelihood(param,syn,nonsyn):
+    conn = np.sum(np.log(probfunct(param,syn)))
+    unc = np.sum(np.log(1. - probfunct(param,nonsyn)))
+    l = conn+unc
     return -l
 
-def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
+def GaussianMLE(pre,main,s_type,f_type,syn_types,nonsyn_types,threshold=None):
     """
 
     Parameters
@@ -72,7 +78,20 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
     # change this if you dont like these guesses!
     mu = 0
     sigs = 100
-    pguess = .5
+
+    precat = []
+    for i in range(len(pre)):
+        pppp = pd.concat(pre[i],ignore_index=True).sort_values(by='pt_position_y').reset_index(drop=True)
+        precat.append(pppp)
+    cat = pd.concat(precat,ignore_index=True).reset_index(drop=True)
+
+    target_list = np.unique(main[0][0].cell_type)
+    cell_types = np.unique(cat.cell_type)
+    exc_targets = []
+    for i in range(len(target_list)):
+        exists = target_list[i] in cell_types
+        if exists == False:
+            exc_targets.append(target_list[i])
 
     pmax_simple = []
     for i in range(len(pre)):
@@ -98,10 +117,15 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
     for i in range(len(pre)):
         rpretype = []
         for j in range(len(allsyns[i])):
-            sigs = 100
-            pguess = .5
+            if len(allsyns[i][j]) <= 2:
+                pguess = 0.
+            else:
+                pguess = .5
             init_guess = [pguess,sigs,mu]
-            r = minimize(fun=log_likelihood,x0=init_guess,bounds=[(0,1.),(0,200),(0,100)],
+            r = minimize(fun=neg_log_likelihood,x0=init_guess,bounds=[(0,1.),(0,200),(0,100)],
+                        method='SLSQP',options={'maxiter':2500},args=(allsyns[i][j],allnons[i][j]))
+            if r.success == False:
+                r = minimize(fun=neg_log_likelihood,x0=init_guess,bounds=[(0,1.),(0,200),(0,100)],
                         method='nelder-mead',options={'maxfev':1000},args=(allsyns[i][j],allnons[i][j]))
             rpretype.append(r)
         r_comb.append(rpretype)
@@ -115,14 +139,20 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
     if len(bad) > 0:
         print("The following pre-syn types failed:")
         for i in range(len(bad)):
-            print(r_comb[bad[i][0]][bad[i][1]][bad[i][2]])
+            print('{0} targeting type {1}, {2} synapses, with result {3}'.format(pre[bad[i][0]][0].cell_type.values[0],
+                                                                    target_list[bad[i][1]],
+                                                                    len(allsyns[bad[i][0]][bad[i][1]]),
+                                                                    r_comb[bad[i][0]][bad[i][1]].x))
 
     res_comb = []
     pmax_comb,sigs_comb,moo_comb = [],[],[]
     for i in range(len(r_comb)):
         pp,mm,ss = [],[],[]
         for j in range(len(r_comb[i])):
-            pp.append(r_comb[i][j].x[0])
+            if r_comb[i][j].x[0] == 0.:
+                pp.append(0.0001)
+            else:
+                pp.append(r_comb[i][j].x[0])
             ss.append(r_comb[i][j].x[1])
             mm.append(r_comb[i][j].x[2])
         pmax_comb.append(pp)
@@ -145,8 +175,6 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
         nconn_comb.append(scell)
         nprobe_comb.append(fcell)
 
-    target_list = np.unique(main[0][0].cell_type)
-
     results = []
     for i in range(len(pre)):
         rpresyn = []
@@ -154,8 +182,14 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
             rcell = []
             pre_pmax, pre_sig = [],[]
             for k in range(len(syn_types[i][j])):
-                init_guess = [pmax_simple[i][j][k],sigs,mu]
-                r = minimize(fun=log_likelihood,x0=init_guess,bounds=[(0,1.),(0,200),(0,100)],
+                if len(syn_types[i][j][k]) <= 2:
+                    init_guess = [0.,sigs,mu]
+                else:
+                    init_guess = [pmax_simple[i][j][k],sigs,mu]
+                r = minimize(fun=neg_log_likelihood,x0=init_guess,bounds=[(0,1.),(0,200),(0,100)],
+                            method='SLSQP',options={'maxiter':2500},args=(syn_types[i][j][k],nonsyn_types[i][j][k]))
+                if r.success == False:
+                    r = minimize(fun=neg_log_likelihood,x0=init_guess,bounds=[(0,1.),(0,200),(0,100)],
                             method='nelder-mead',options={'maxfev':1000},args=(syn_types[i][j][k],nonsyn_types[i][j][k]))
                 if r.x[0] == 0.:
                     pmaxx = 0.0001
@@ -174,9 +208,13 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
             if threshold == None:
                 pre[i][j]['pmax'] = [pre_pmax]
                 pre[i][j]['sigma_extent'] = [pre_sig]
+                pre[i][j]['pmax_exc'] = [pre[i][j][exc_targets[0:5]].values]
+                pre[i][j]['pmax_inh'] = [pre[i][j][cell_types[:-1]].values]
             else:
                 pre[i][j]['pmax_thresh'] = [pre_pmax]
                 pre[i][j]['sigma_extent_thresh'] = [pre_sig]
+                pre[i][j]['pmax_exc_thresh'] = [pre[i][j][exc_targets[0:5]].values]
+                pre[i][j]['pmax_inh_thresh'] = [pre[i][j][cell_types[:-1]].values]
             rpresyn.append(rcell)
         results.append(rpresyn)
     bad = []
@@ -190,7 +228,11 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
     if len(bad) > 0:
         print("The following cells failed:")
         for i in range(len(bad)):
-            print(results[bad[i][0]][bad[i][1]][bad[i][2]])
+            print('{0}-{1} targeting type {2}, {3} synapses, with result {4}'.format(pre[bad[i][0]][0].cell_type.values[0],
+                                                                    pre[bad[i][0]][bad[i][1]].pt_root_id.values[0],
+                                                                    target_list[bad[i][2]],
+                                                                    len(syn_types[bad[i][0]][bad[i][1]][bad[i][2]]),
+                                                                    results[bad[i][0]][bad[i][1]][bad[i][2]].x))
 
     res = []
     pmax,sigs,moo = [],[],[]
@@ -228,8 +270,7 @@ def GaussianMLE(pre,s_type,f_type,syn_types,nonsyn_types,main,threshold=None):
 
     precat = []
     for i in range(len(pre)):
-        pppp = pd.concat(pre[i],ignore_index=True).sort_values(by='pt_position_y').reset_index(drop=True)
-        precat.append(pppp)
+        precat.append(pd.concat(pre[i],ignore_index=True).sort_values(by='pt_position_y').reset_index(drop=True))
     cat = pd.concat(precat,ignore_index=True).reset_index(drop=True)
 
     return res_comb,nconn_comb,nprobe_comb,res,nconn,nprobe,precat,cat
