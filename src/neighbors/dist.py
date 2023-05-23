@@ -2,6 +2,19 @@ __all__ = ["Euc_cell2cell","Rad_cell2cell","Euc_syn2cell","Rad_syn2cell"]
 
 import numpy as np
 
+def euclidean_distance(xyz0, xyz):
+    xyz = np.atleast_2d(xyz)
+    return np.sqrt(
+        ((xyz0[0] - xyz[:,0]) ** 2) + ((xyz0[1] - xyz[:,1]) ** 2) + ((xyz0[2] - xyz[:,2]) ** 2)
+    )
+
+def radial_distance(xyz0, xyz):
+    xyz = np.atleast_2d(xyz)
+    return np.sqrt(
+        ((xyz0[0] - xyz[:,0]) ** 2) + ((xyz0[2] - xyz[:,2]) ** 2)
+    )
+
+
 def Euc_cell2cell(pre,post):
     # adjusts coordinates to be in units of microns
     xy = (4./1000)
@@ -56,16 +69,13 @@ def Rad_syn2cell(syn_df,cell):
     distance = []
     for i in range(len(syn_df)):
         d = []
-        if syn_df.ctr_pt_position[i] == 0:
-            d.append(0)
-        else:
-            for j in range(len(np.array(syn_df.ctr_pt_position[i]))):
-                x_syn = np.array(syn_df.ctr_pt_position[i])[j][0]*xy
-                z_syn = np.array(syn_df.ctr_pt_position[i])[j][2]*z
-                if len(cell) == 1:
-                    dsyn = np.sqrt((x_syn-x_cell[0])**2 + (z_syn-z_cell[0])**2)
-                else:
-                    dsyn = np.sqrt((x_syn-x_cell[i])**2 + (z_syn-z_cell[i])**2)
-                d.append(np.around(dsyn,3))
+        for j in range(len(np.array(syn_df.ctr_pt_position[i]))):
+            x_syn = np.array(syn_df.ctr_pt_position[i])[j][0]*xy
+            z_syn = np.array(syn_df.ctr_pt_position[i])[j][2]*z
+            if len(cell) == 1:
+                dsyn = np.sqrt((x_syn-x_cell[0])**2 + (z_syn-z_cell[0])**2)
+            else:
+                dsyn = np.sqrt((x_syn-x_cell[i])**2 + (z_syn-z_cell[i])**2)
+            d.append(np.around(dsyn,3))
         distance.append(d)
     return distance
