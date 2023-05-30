@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from .dist import radial_distance, euclidean_distance
-from .connect_stats import binomial_CI
+from .connect_stats import binomial_ci
 
 
 def _compute_soma_distances(

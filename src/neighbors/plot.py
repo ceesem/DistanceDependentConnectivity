@@ -1,5 +1,3 @@
-__all__ = ["threepanels_pertype", "makepdfs", "heatmap", "annotate_heatmap"]
-
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
@@ -9,8 +7,7 @@ import statsmodels as sm
 import warnings
 from tqdm import tqdm
 from scipy.optimize import minimize
-from .connect_stats import probfunct, pmax_type, log_likelihood
-
+from .connect_stats import probfunct, log_likelihood
 
 def threepanels_pertype(
     main,

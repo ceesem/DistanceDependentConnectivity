@@ -45,20 +45,19 @@ def compute_binned_errorbars(s, f, method='wilson'):
     return probability, (np.abs(probability - errorbars[0]), np.abs(errorbars[1] - probability))
 
 
-def probfunct(param,df):
-    d = df['r']
+def probfunct(param,d):
     p = param[0] * np.exp(-((d-param[2])**2)/(2*(param[1]**2)))
     return p
 
-def log_likelihood(param,syn,nonsyn):
-    conn = np.sum(np.log(probfunct(param,syn)))
-    unc = np.sum(np.log(1. - probfunct(param,nonsyn)))
+def log_likelihood(param,syn,nonsyn, distance_column='r'):
+    conn = np.sum(np.log(probfunct(param,syn[distance_column])))
+    unc = np.sum(np.log(1. - probfunct(param,nonsyn[distance_column])))
     l = conn+unc
     return l
 
-def neg_log_likelihood(param,syn,nonsyn):
-    conn = np.sum(np.log(probfunct(param,syn)))
-    unc = np.sum(np.log(1. - probfunct(param,nonsyn)))
+def neg_log_likelihood(param,syn,nonsyn, distance_column='r'):
+    conn = np.sum(np.log(probfunct(param,syn[distance_column])))
+    unc = np.sum(np.log(1. - probfunct(param,nonsyn[distance_column])))
     l = conn+unc
     return -l
 

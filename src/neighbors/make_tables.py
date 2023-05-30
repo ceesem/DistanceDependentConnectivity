@@ -14,8 +14,8 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from .dist import Euc_cell2cell, Rad_cell2cell, Euc_syn2cell, Rad_syn2cell
-from .connect_stats import binomial_CI
-
+from .connect_stats import binomial_ci
+    
 def rename_by_layer(df, depths, depth_names):
     """
     Rename cell types in any df using their pt_position_y, or depth in the sample, to determine which cortical layer they're in.
